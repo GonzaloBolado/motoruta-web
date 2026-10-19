@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MotoRuta · Planificador</title>
+    <link rel="stylesheet" href="vendor/leaflet.css" />
+    <link rel="stylesheet" href="css/styles.css" />
+    <link rel="stylesheet" href="vendor/maplibre-gl.css" />
+    <script src="vendor/leaflet.js"></script>
+    <script src="vendor/maplibre-gl.js"></script>
+    <script src="vendor/leaflet-maplibre-gl.js"></script>
+  </head>
+  <body>
+    <aside id="sidebar">
+      <!-- solo en móvil: el panel es una hoja que asoma por abajo -->
+      <button id="sheet-handle" class="sheet-handle" type="button">
+        <span class="grabber"></span>
+        <span id="sheet-summary">Toca el mapa para empezar la ruta</span>
+      </button>
+      <header class="brand">
+        <div class="logo"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 19 20 12 16 5 20z"/></svg></div>
+        <div>
+          <h1>MotoRuta</h1>
+          <p>Planificador de rutas</p>
+        </div>
+      </header>
+
+      <section>
+        <form id="search-form" class="search">
+          <input id="search-input" type="search" placeholder="Buscar un lugar…" autocomplete="off" />
+        </form>
+        <ul id="search-results" class="search-results"></ul>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h2>Ruta</h2>
+          <div class="tools">
+            <button id="btn-undo" title="Deshacer (Ctrl+Z)">↶</button>
+            <button id="btn-reverse" title="Invertir sentido">⇅</button>
+            <button id="btn-fit" title="Ver ruta completa">⤢</button>
+            <button id="btn-clear" title="Borrar ruta">✕</button>
+          </div>
+        </div>
+        <button id="btn-generate" class="generate" data-icon="sparkles">Generar ruta automática</button>
+        <div id="alts" class="alts hidden">
+          <div class="alts-head">
+            <span>Alternativas generadas</span>
+            <button id="alts-close" title="Descartar alternativas">✕</button>
+          </div>
+          <ol id="alts-list"></ol>
+        </div>
+        <ol id="stops" class="stops"></ol>
+        <p id="hint" class="hint">
+          Haz <b>clic en el mapa</b> para poner la salida <span class="badge a">A</span> y otra vez para el destino
+          <span class="badge b">B</span>. <b>Arrastra la línea</b> de la ruta para llevarla por donde quieras.
+          Clic derecho en el mapa para más opciones.
+        </p>
+      </section>
+
+      <section>
+        <h2>Preferencias de moto</h2>
+        <label class="toggle"><input id="opt-highways" type="checkbox" /><span></span>Evitar autovías</label>
+        <label class="toggle"><input id="opt-tolls" type="checkbox" /><span></span>Evitar peajes</label>
+        <label class="toggle"><input id="opt-trails" type="checkbox" /><span></span>Permitir pistas sin asfaltar</label>
+        <label class="toggle"><input id="opt-ferry" type="checkbox" /><span></span>Permitir ferris</label>
+      </section>
+
+      <section id="summary-section" class="hidden">
+        <h2>Indicadores</h2>
+        <div class="totals">
+          <div><b id="ind-distance">–</b><span>distancia</span></div>
+          <div><b id="ind-time">–</b><span>tiempo del navegador</span></div>
+          <div class="hl" title="Tiempo en carreteras secundarias reducido un 20%: en moto se va más rápido que su límite">
+            <b id="ind-corrected">–</b><span>tiempo corregido</span>
+          </div>
+          <div class="hl" title="Tiempo corregido + 10 min de descanso por cada hora de conducción">
+            <b id="ind-total">–</b><span id="ind-rests">total con paradas</span>
+          </div>
+          <div><b id="ind-fuel-count">–</b><span>gasolineras en ruta</span></div>
+          <div title="Distancia máxima entre dos gasolineras de la ruta (incluye salida y llegada)">
+            <b id="ind-fuel-gap">–</b><span>tramo más largo sin gasolinera</span>
+          </div>
+        </div>
+        <p id="ind-cheapest" class="cheapest hidden"></p>
+        <p id="sum-flags" class="flags"></p>
+        <!-- pistas: zonas protegidas y accesos prohibidos (solo si la ruta tiene caminos de cabras) -->
+        <div id="offroad" class="offroad hidden"></div>
+
+        <div class="section-head sub">
+          <h3>Tipo de vía</h3>
+          <label class="check small"><input id="opt-color" type="checkbox" checked /> Colorear ruta</label>
+        </div>
+        <div id="type-bar" class="type-bar"></div>
+        <ul id="type-legend" class="type-legend"></ul>
+        <label class="check small fuel-toggle"><input id="opt-fuel" type="checkbox" checked /> Mostrar gasolineras en el mapa</label>
+      </section>
+
+      <section id="days-section" class="hidden">
+        <div class="section-head">
+          <h2>Etapas y tiempo</h2>
+          <label class="check small"><input id="opt-weather" type="checkbox" checked /> En el mapa</label>
+        </div>
+        <div class="departure">
+          <label>Salida <input id="dep-date" /></label>
+          <label>a las <select id="dep-time"></select></label>
+        </div>
+        <div id="days"></div>
+      </section>
+
+      <section>
+        <h2>Mis rutas</h2>
+        <form id="save-form" class="search">
+          <input id="route-name" type="text" placeholder="Nombre de la ruta" />
+          <button type="submit">Guardar</button>
+        </form>
+        <ul id="saved" class="saved"></ul>
+        <button id="btn-export-nav" class="export-nav">Exportar para la moto</button>
+        <div class="row">
+          <button id="btn-export">Exportar GPX</button>
+          <button id="btn-import">Importar GPX</button>
+          <input id="file-import" type="file" accept=".gpx,application/gpx+xml" hidden />
+        </div>
+      </section>
+
+      <footer>
+        <details class="credits">
+          <summary>Datos y servicios</summary>
+          <ul>
+            <li>Mapa, rutas y lugares: © colaboradores de <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> (ODbL)</li>
+            <li>Teselas: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · © <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> · <a href="https://versatiles.org" target="_blank" rel="noopener">VersaTiles</a></li>
+            <li>Cálculo de rutas: <a href="https://valhalla.github.io/valhalla/" target="_blank" rel="noopener">Valhalla</a> (servidor de FOSSGIS)</li>
+            <li>Búsqueda de lugares: <a href="https://photon.komoot.io" target="_blank" rel="noopener">Photon</a> y Nominatim · Zonas protegidas: Overpass</li>
+            <li>Tiempo: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0)</li>
+            <li>Precios de carburantes: fuente <a href="https://geoportalgasolineras.es/" target="_blank" rel="noopener">Ministerio para la Transición Ecológica y el Reto Demográfico</a></li>
+          </ul>
+        </details>
+      </footer>
+    </aside>
+
+    <main id="map-wrap">
+      <div id="map"></div>
+      <div id="status" class="status hidden"></div>
+    </main>
+
+    <dialog id="wizard" class="wizard">
+      <form method="dialog" id="wizard-form">
+        <header>
+          <h2>Generar ruta</h2>
+          <button type="button" class="close" data-close title="Cerrar">✕</button>
+        </header>
+
+        <div class="tabs" role="tablist">
+          <label><input type="radio" name="mode" value="trip" checked /><span data-icon="route">Viaje de varios días</span></label>
+          <label><input type="radio" name="mode" value="loop" /><span data-icon="loop">Ruta de un día</span></label>
+        </div>
+
+        <div class="field">
+          <span class="label" id="wz-from-label">Salida</span>
+          <div class="place" id="pp-from"></div>
+        </div>
+        <div class="field only-trip">
+          <span class="label">Pasar por <i>(opcional)</i></span>
+          <div id="wz-through" class="through"></div>
+          <button type="button" id="wz-add-through" class="add-link">+ Añadir punto intermedio</button>
+        </div>
+        <div class="field only-trip">
+          <span class="label">Destino</span>
+          <div class="place" id="pp-to"></div>
+        </div>
+        <div class="field only-loop">
+          <label class="check"><input id="wz-same" type="checkbox" checked /> Vuelvo al mismo sitio</label>
+          <div class="place hidden" id="pp-end"></div>
+        </div>
+
+        <div class="grid2">
+          <label class="field only-trip">
+            <span class="label">Km por día</span>
+            <input id="wz-kmday" type="number" min="100" max="900" step="10" value="350" />
+            <small>Máx. ~8 h de conducción al día</small>
+          </label>
+          <label class="field only-loop">
+            <span class="label">Km aproximados</span>
+            <input id="wz-km" type="number" min="40" max="700" step="10" value="250" />
+          </label>
+          <div class="field">
+            <span class="label">Curvas</span>
+            <div class="segmented">
+              <label><input type="radio" name="curvy" value="low" /><span>Pocas</span></label>
+              <label><input type="radio" name="curvy" value="mid" /><span>Algunas</span></label>
+              <label><input type="radio" name="curvy" value="high" checked /><span>Muchas</span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="toggle"><input id="wz-highways" type="checkbox" checked /><span></span>Evitar autopistas y autovías</label>
+          <label class="toggle"><input id="wz-tolls" type="checkbox" checked /><span></span>Evitar peajes</label>
+          <label class="toggle only-loop"><input id="wz-trails" type="checkbox" /><span></span>Permitir pistas sin asfaltar</label>
+        </div>
+
+        <div class="grid2">
+          <label class="field"><span class="label">Día de salida</span><input id="wz-date" /></label>
+          <label class="field"><span class="label">Hora de salida</span><select id="wz-time"></select></label>
+        </div>
+
+        <div id="wz-progress" class="progress hidden"><div></div><span>Probando variantes…</span></div>
+        <p id="wz-error" class="wz-error hidden"></p>
+
+        <footer>
+          <button type="button" data-close>Cancelar</button>
+          <button type="submit" id="wz-submit" class="primary">Generar ruta</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>
